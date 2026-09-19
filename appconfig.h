@@ -5,7 +5,7 @@
 #include <QByteArray>
 
 struct AppConfig {
-    QString inputMask;
+    QString inputPattern;
     QString inputDirectory;
     QString outputDirectoy;
     bool isDeleteSourceFiles;

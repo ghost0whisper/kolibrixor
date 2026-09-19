@@ -1,3 +1,0 @@
-# Hashes of file build rules.
-8ce1c7d43225bb2d984231d6e10de471 CMakeFiles/KolibriTest_autogen
-16f0bf5835c7aaa0a9bd8896d614e71d KolibriTest_autogen/timestamp

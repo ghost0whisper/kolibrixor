@@ -14,6 +14,7 @@
 #include <QPlainTextEdit>
 #include <QHBoxLayout>
 #include <QGroupBox>
+#include <QQueue>
 #include "appconfig.h"
 #include "fileprocessor.h"
 #include "filemonitor.h"
@@ -30,7 +31,6 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-    // ~MainWindow() override;
     ~MainWindow();
 
 protected:
@@ -38,33 +38,35 @@ protected:
 
 private slots:
     // File execution
-    void onFileFound(const QString *filePath);
+    void onFileFound(const QString &filePath);
     void onProcessingStarted(const QString &filename);
     void onProcessingProgress(qint64 processed, qint64 total);
     void onProcessingFinished(bool success, const QString &message);
     void onProcessingStatusChanged(const QString &status);
+    void processNextFile();
 
     // User handling
-    void onStartClicked();
-    void onStopClicked();
-    void onPauseClicked();
-    void onResumeClicked();
-    void onBrowseInput();
-    void onBrowseOutput();
     void onStartMonitoring();
     void onStopMonitoring();
+    void onPauseMonitoring();
+    void onResumeMonitoring();
+    void onCancelProcessing();
+    void onBrowseInput();
+    void onBrowseOutput();
 
     bool validateXorValue(const QString &hexString, QByteArray &result);
     QString generateOutputFileName(const QString &inputPath);
 
     void onClearLog();
-    // void updatedProgress(QString filename, double percentage);
-    // void handleNewFiles(const QStringList &files);
     void onLog(const QString &message);
 
 private:
     void setupUI();
     void createConnections();
+    void updateButtonStates();
+    void updateConfigFromUI();
+    void updateStatus(const QString &status);
+    FileMonitor::MonitorParams createMonitorParams();
     QHBoxLayout* inputLayoutSetup();
     QHBoxLayout* outputLayoutSetup();
     QHBoxLayout* filePatternLayoutSetup();
@@ -80,6 +82,7 @@ private:
 
     // Ui::MainWindow *ui;
     AppConfig m_config;
+    QQueue<QString> m_fileQueue;
     bool m_isProcessing;
     bool m_isPaused;
     QString m_currentFile;
