@@ -41,22 +41,18 @@ private slots:
     void onFileFound(const QString &filePath);
     void onProcessingStarted(const QString &filename);
     void onProcessingProgress(qint64 processed, qint64 total);
-    void onProcessingFinished(bool success, const QString &message);
-    void onProcessingStatusChanged(const QString &status);
-    void processNextFile();
+    void onProcessingFinished(const QString &path, bool isSuccess, bool isCanceled);
 
     // User handling
     void onStartMonitoring();
     void onStopMonitoring();
-    void onPauseMonitoring();
-    void onResumeMonitoring();
-    void onCancelProcessing();
+    void onPauseProcessing();
+    void onResumeProcessing();
+    void onStopProcessing();
     void onBrowseInput();
     void onBrowseOutput();
 
-    bool validateXorValue(const QString &hexString, QByteArray &result);
-    QString generateOutputFileName(const QString &inputPath);
-
+    void updateStatus(const QString &status);
     void onClearLog();
     void onLog(const QString &message);
 
@@ -65,7 +61,10 @@ private:
     void createConnections();
     void updateButtonStates();
     void updateConfigFromUI();
-    void updateStatus(const QString &status);
+    void setXorValueFromUI();
+    void processNextFile();
+    bool validateXorValue(const QString &hexString, QByteArray &result);
+    QString generateOutputFileName(const QString &inputPath);
     FileMonitor::MonitorParams createMonitorParams();
     QHBoxLayout* inputLayoutSetup();
     QHBoxLayout* outputLayoutSetup();
@@ -83,9 +82,9 @@ private:
     // Ui::MainWindow *ui;
     AppConfig m_config;
     QQueue<QString> m_fileQueue;
+    bool m_isMonitoring;
     bool m_isProcessing;
     bool m_isPaused;
-    QString m_currentFile;
 
     FileProcessor *m_fileProcessor;
     QThread *m_fileProcessorThread;
@@ -109,9 +108,10 @@ private:
 
     // Control UI elements
     QPushButton *m_startButton;
-    QPushButton *m_stopButton;
+    QPushButton *m_stopMonitoringButton;
     QPushButton *m_pauseButton;
     QPushButton *m_resumeButton;
+    QPushButton *m_stopProcessingButton;
 
     // Progress UI elements
     QProgressBar *m_progressBar;

@@ -14,16 +14,16 @@ qt_standard_project_setup()
 
 qt_add_executable(KolibriTest
     WIN32 MACOSX_BUNDLE
-    main.cpp
-    mainwindow.cpp
-    mainwindow.h
-    appconfig.h
-    filemonitor.h
-    fileprocessor.h
-    logger.h
-    logger.cpp
-    fileprocessor.cpp
-    filemonitor.cpp
+    src/main.cpp
+    src/mainwindow.cpp
+    headers/mainwindow.h
+    headers/appconfig.h
+    headers/filemonitor.h
+    headers/fileprocessor.h
+    headers/logger.h
+    src/logger.cpp
+    src/fileprocessor.cpp
+    src/filemonitor.cpp
 )
 
 target_link_libraries(KolibriTest

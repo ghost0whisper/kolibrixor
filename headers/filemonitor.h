@@ -18,10 +18,12 @@ public:
 
     explicit FileMonitor(QObject *parent = nullptr);
     ~FileMonitor();
-    void startMonitoring(const MonitorParams &params);
-    void stopMonitoring();
     bool isMonitoring() const;
     void setEnabled(bool isEnabled);
+
+public slots:
+    void startMonitoring(const FileMonitor::MonitorParams &params);
+    void stopMonitoring();
 
 signals:
     void fileFound(const QString &filePath);
@@ -35,6 +37,7 @@ private:
     void scanDirectory();
     bool matchesPattern(const QString &fileName) const;
     QRegularExpression patternToRegex(const QString &pattern) const;
+    void updateStatus(const QString &message);
 
     MonitorParams m_params;
     QStringList m_lastFoundFiles;

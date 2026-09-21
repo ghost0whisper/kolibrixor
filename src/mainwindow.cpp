@@ -1,5 +1,5 @@
-#include "mainwindow.h"
-#include "logger.h"
+#include "../headers/mainwindow.h"
+#include "../headers/logger.h"
 
 #include <QGroupBox>
 #include <QBoxLayout>
@@ -12,11 +12,11 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    // , ui(new Ui::MainWindow)
     , m_fileProcessor(nullptr)
     , m_fileProcessorThread(nullptr)
     , m_fileMonitor(nullptr)
     , m_fileMonitorThread(nullptr)
+    , m_isMonitoring(false)
     , m_isProcessing(false)
     , m_isPaused(false)
 {
@@ -228,14 +228,19 @@ QGroupBox* MainWindow::controlBoxSetup() {
     m_resumeButton = new QPushButton("Resume");
     m_resumeButton->setEnabled(false);
 
-    m_stopButton = new QPushButton("Stop");
-    m_stopButton->setEnabled(false);
-    m_stopButton->setStyleSheet("background-color: #f44336; color: white;");
+    m_stopMonitoringButton = new QPushButton("Stop");
+    m_stopMonitoringButton->setEnabled(false);
+    m_stopMonitoringButton->setStyleSheet("background-color: #f44336; color: white;");
+
+    m_stopProcessingButton = new QPushButton("Cancel");
+    m_stopProcessingButton->setEnabled(false);
+    m_stopProcessingButton->setStyleSheet("background-color: #f44336; color: white;");
 
     controlLayout->addWidget(m_startButton);
     controlLayout->addWidget(m_pauseButton);
     controlLayout->addWidget(m_resumeButton);
-    controlLayout->addWidget(m_stopButton);
+    controlLayout->addWidget(m_stopMonitoringButton);
+    controlLayout->addWidget(m_stopProcessingButton);
     controlLayout->addStretch();
 
     return controlGroup;
@@ -280,10 +285,16 @@ void MainWindow::createConnections() {
     connect(m_selectInputPathButton, &QPushButton::clicked, this, &MainWindow::onBrowseInput);
     connect(m_selectOutputPathButton, &QPushButton::clicked, this, &MainWindow::onBrowseOutput);
     connect(m_startButton, &QPushButton::clicked, this, &MainWindow::onStartMonitoring);
-    connect(m_stopButton, &QPushButton::clicked, this, &MainWindow::onStopMonitoring);
-    connect(m_pauseButton, &QPushButton::clicked, this, &MainWindow::onPauseMonitoring);
-    connect(m_resumeButton, &QPushButton::clicked, this, &MainWindow::onResumeMonitoring);
+    connect(m_stopMonitoringButton, &QPushButton::clicked, this, &MainWindow::onStopMonitoring);
+    connect(m_stopProcessingButton, &QPushButton::clicked, this, &MainWindow::onStopProcessing);
+    connect(m_pauseButton, &QPushButton::clicked, this, &MainWindow::onPauseProcessing);
+    connect(m_resumeButton, &QPushButton::clicked, this, &MainWindow::onResumeProcessing);
     connect(m_clearLogButton, &QPushButton::clicked, this, &MainWindow::onClearLog);
+    connect(m_fileMonitor, &FileMonitor::fileFound, this, &MainWindow::onFileFound);
+    connect(m_fileProcessor, &FileProcessor::fileProcessingStarted, this, &MainWindow::onProcessingStarted);
+    connect(m_fileProcessor, &FileProcessor::progressUpdated, this, &MainWindow::onProcessingProgress);
+    connect(m_fileProcessor, &FileProcessor::statusChanged, this, &MainWindow::updateStatus);
+    connect(m_fileProcessor, &FileProcessor::fileProcessed, this, &MainWindow::onProcessingFinished);
 
     connect(Logger::instance(), &Logger::newMessage, this, &MainWindow::onLog);
 
@@ -291,9 +302,8 @@ void MainWindow::createConnections() {
     connect(m_fileMonitorThread, &QThread::finished, m_fileMonitor, &QObject::deleteLater);
 }
 
-void MainWindow::onPauseMonitoring() {
-    QMetaObject::invokeMethod(m_fileProcessor, "pause", Qt::QueuedConnection);
-
+void MainWindow::onPauseProcessing() {
+    m_fileProcessor->pause();
     m_isPaused = true;
 
     updateButtonStates();
@@ -301,9 +311,8 @@ void MainWindow::onPauseMonitoring() {
     Logger::instance()->log("Processing is stopped");
 }
 
-void MainWindow::onResumeMonitoring() {
-    QMetaObject::invokeMethod(m_fileProcessor, "resume", Qt::QueuedConnection);
-
+void MainWindow::onResumeProcessing() {
+    m_fileProcessor->resume();
     m_isPaused = false;
 
     updateButtonStates();
@@ -311,60 +320,54 @@ void MainWindow::onResumeMonitoring() {
     Logger::instance()->log("Processing is continue");
 }
 
-void MainWindow::onCancelProcessing() {
-    QMetaObject::invokeMethod(m_fileProcessor, "cancel", Qt::QueuedConnection);
-
+void MainWindow::onStopProcessing() {
+    m_fileProcessor->stop();
+    m_isProcessing = false;
     m_fileQueue.clear();
 
     Logger::instance()->log("Processing is canceled");
 
     updateButtonStates();
+    onProcessingProgress(0, 0);
 }
 
 void MainWindow::onBrowseInput() {
     QString dir = QFileDialog::getExistingDirectory(this, "Choose directory of input files", m_inputPathEdit->text());
 
-    if (!dir.isEmpty()) {
+    if (!dir.isEmpty())
         m_inputPathEdit->setText(dir);
-    }
 }
 
 void MainWindow::onBrowseOutput() {
     QString dir = QFileDialog::getExistingDirectory(this, "Choose directory of output files", m_outputPathEdit->text());
 
-    if (!dir.isEmpty()) {
+    if (!dir.isEmpty())
         m_outputPathEdit->setText(dir);
-    }
 }
 
 void MainWindow::onStartMonitoring() {
     updateConfigFromUI();
 
     if (m_config.inputDirectory.isEmpty()) {
-        const QString &message = QString("Error: set directory of input files");
+        const QString &message = QString("Set directory of input files");
         Logger::instance()->log(message, 1);
         QMessageBox::critical(this, "Error", message);
         return;
     }
 
     if (m_config.outputDirectoy.isEmpty()) {
-        const QString &message = QString("Error: set directory of output files");
+        const QString &message = QString("Set directory of output files");
         Logger::instance()->log(message, 1);
         QMessageBox::critical(this, "Error", message);
         return;
     }
 
-    QByteArray xorKey;
-    auto xorHexValue = m_config.xorKey.data();
-
-    if (!validateXorValue(xorHexValue, xorKey)) {
-        const QString &message = QString("Error: invalid XOR value");
+    if (m_config.xorKey.size() != 8) {
+        const QString &message = QString("Invalid XOR value");
         Logger::instance()->log(message, 1);
         QMessageBox::critical(this, "Error", message);
         return;
     }
-
-    m_config.xorKey = xorKey;
 
     auto monitorParams = createMonitorParams();
 
@@ -372,7 +375,7 @@ void MainWindow::onStartMonitoring() {
         m_fileMonitor, "startMonitoring", Qt::QueuedConnection, Q_ARG(FileMonitor::MonitorParams, monitorParams)
     );
 
-    m_isProcessing = true;
+    m_isMonitoring = true;
 
     updateButtonStates();
 
@@ -384,7 +387,7 @@ void MainWindow::onStartMonitoring() {
 void MainWindow::onStopMonitoring() {
     QMetaObject::invokeMethod(m_fileMonitor, "stopMonitoring", Qt::QueuedConnection);
 
-    m_isProcessing = false;
+    m_isMonitoring = false;
     m_fileQueue.clear();
 
     updateButtonStates();
@@ -397,9 +400,9 @@ void MainWindow::onFileFound(const QString &filePath) {
 
     Logger::instance()->log(QString("File is detected: %1").arg(QFileInfo(filePath).fileName()));
 
-    if (!m_isProcessing && m_autoStartCheckBox->isChecked()) {
+    if (!m_isMonitoring && m_autoStartCheckBox->isChecked()) {
         processNextFile();
-    } else if (m_isProcessing && !m_isPaused) {
+    } else if (m_isMonitoring && !m_isPaused) {
         processNextFile();
     }
 }
@@ -464,8 +467,6 @@ void MainWindow::processNextFile() {
     params.bufferSize = 1024 * 1024; // 1 MB
     params.isDeleteSource = m_config.isDeleteSourceFiles;
 
-    m_currentFile = QFileInfo(inputFile).fileName();
-
     QMetaObject::invokeMethod(
         m_fileProcessor, "processFile", Qt::QueuedConnection, Q_ARG(FileProcessor::ProcessingParams, params)
     );
@@ -474,13 +475,16 @@ void MainWindow::processNextFile() {
 void MainWindow::onProcessingStarted(const QString &filename) {
     updateStatus(QString("Processing %1...").arg(filename));
 
+    m_isProcessing = true;
     m_progressBar->setValue(0);
 
     Logger::instance()->log(QString("Start processing %1").arg(filename));
+
+    updateButtonStates();
 }
 
 void MainWindow::onProcessingProgress(qint64 processed, qint64 total) {
-    int percent = (total > 0) ? (100 & processed / total) : 0;
+    int percent = (total > 0) ? (100 * processed / total) : 0;
 
     int mb = 1024 * 1024;
 
@@ -493,15 +497,25 @@ void MainWindow::onProcessingProgress(qint64 processed, qint64 total) {
     );
 }
 
-void MainWindow::onProcessingFinished(bool success, const QString &message) {
-    if (success) {
-        Logger::instance()->log(QString("Success processed: %1").arg(m_currentFile));
+void MainWindow::onProcessingFinished(const QString &path, bool isSuccess, bool isCanceled) {
+    auto fileName = QFileInfo(path).fileName();
+
+    if (isSuccess) {
+        Logger::instance()->log(QString("Success processed: %1").arg(fileName));
     } else {
-        Logger::instance()->log(QString("Error at processing: %1").arg(message), 1);
+        const QString &text = QString("File %1 is not processed").arg(path);
+
+        if (!isCanceled)
+            QMessageBox::critical(this, "Error", text);
+
+        Logger::instance()->log(text, 1);
     }
 
-    m_progressBar->setValue(100);
+    m_isProcessing = false;
+    m_isPaused = false;
+    m_progressBar->setValue(isSuccess ? 100 : 0);
 
+    updateButtonStates();
     updateStatus(QString("Ready"));
 
     if (!m_fileQueue.isEmpty()) {
@@ -511,17 +525,14 @@ void MainWindow::onProcessingFinished(bool success, const QString &message) {
     }
 }
 
-void MainWindow::onProcessingStatusChanged(const QString &status) {
-    Logger::instance()->log(QString("i %1").arg(status));
-}
-
 void MainWindow::updateButtonStates() {
-    m_startButton->setEnabled(!m_isProcessing);
-    m_stopButton->setEnabled(m_isProcessing);
+    bool isEditEnabled = !m_isMonitoring && !m_isProcessing;
+
+    m_startButton->setEnabled(isEditEnabled);
+    m_stopMonitoringButton->setEnabled(m_isMonitoring);
+    m_stopProcessingButton->setEnabled(m_isProcessing);
     m_pauseButton->setEnabled(m_isProcessing && !m_isPaused);
     m_resumeButton->setEnabled(m_isProcessing && m_isPaused);
-
-    bool isEditEnabled = !m_isProcessing;
 
     m_inputPathEdit->setEnabled(isEditEnabled);
     m_outputPathEdit->setEnabled(isEditEnabled);
@@ -537,6 +548,19 @@ void MainWindow::updateConfigFromUI() {
     m_config.isOverwriteExistingFiles = (m_overwriteComboBox->currentIndex() == 0);
     m_config.isTimerMode = m_autoStartCheckBox->isChecked();
     m_config.pollIntervalMs = m_monitorIntervalSpinBox->value();
+
+    setXorValueFromUI();
+}
+
+void MainWindow::setXorValueFromUI() {
+    QString xorHex = m_xorPatternEdit->text();
+    QByteArray xorKey;
+
+    if (validateXorValue(xorHex, xorKey)) {
+        m_config.xorKey = xorKey;
+    } else {
+        m_config.xorKey.clear();
+    }
 }
 
 void MainWindow::updateStatus(const QString &status) {
@@ -562,7 +586,7 @@ void MainWindow::onLog(const QString &message) {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    if (m_isProcessing) {
+    if (m_isMonitoring) {
         int isClose = QMessageBox::warning(
             this, "Close application?", "Files is processing", QMessageBox::Yes, QMessageBox::No
         );
@@ -573,7 +597,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
         }
 
         onStopMonitoring();
-        onCancelProcessing();
+        onStopProcessing();
     }
 
     int threadWait = 5000;

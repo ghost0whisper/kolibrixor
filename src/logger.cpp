@@ -1,4 +1,4 @@
-#include "logger.h"
+#include "../headers/logger.h"
 #include <QDateTime>
 
 Logger* Logger::m_instance = nullptr;

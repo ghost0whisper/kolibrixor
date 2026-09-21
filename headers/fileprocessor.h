@@ -21,21 +21,26 @@ public:
     explicit FileProcessor(QObject *parent = nullptr);
     ~FileProcessor();
 
-    void processFile(const ProcessingParams &params);
     void pause();
     void resume();
     void stop();
     bool isPaused() const;
+    bool isStopped() const;
+
+public slots:
+    void processFile(const FileProcessor::ProcessingParams &params);
 
 signals:
+    void fileProcessingStarted(const QString &path);
     void progressUpdated(qint64 bytesProcessed, qint64 totalBytes);
-    void statusChangeed(const QString &status);
-    void fileProcessed(const QString &outputPath, bool isSuccess);
-    void processingFinished();
+    void statusChanged(const QString &status);
+    void fileProcessed(const QString &outputPath, bool isSuccess, bool isCanceled);
 
 private:
     void doProcessFile(const ProcessingParams &params);
     bool validateXorValue(const QByteArray &xorValue);
+    void finishProcess(const QString &outputPath, bool isSuccess, bool isCanceled, const QString &message);
+    void checkDeletingSources(const QString &inputFilePath, bool isDeleteSource);
 
     mutable QMutex m_pauseMutex;
     QWaitCondition m_pauseCondition;
